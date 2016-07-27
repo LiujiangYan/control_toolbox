@@ -78,6 +78,5 @@ private:
 	double x_;
 	unsigned short seed_[3];
 };
-}
 
 #endif
