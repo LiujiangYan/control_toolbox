@@ -6,9 +6,13 @@
 #include <math.h>
 #include <iostream>
 
+using namespace std;
+
 class Dither{
 public:
-	Dither() : amplitude_(0), has_saved_value_(false)
+    Dither() : amplitude_(0), has_saved_value_(false){
+        
+    }
 
 	/*!
 	* \brief Destructor.

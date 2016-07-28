@@ -1,54 +1,27 @@
 #ifndef CONTROL_TOOLBOX__LIMITED_PROXY_H
 #define CONTROL_TOOLBOX__LIMITED_PROXY_H
 
+#include <math.h>
+
 static void calcDynamics2ndorder(double &a, double &dadp, double &dadv, double p, double v, double lam, double acon){
     double lam2 = lam*lam;    // Lambda squared
-
-    // Separate 3 regions: large positive, small, and large negative positions
     if (lam2*p > 3*acon){
-        // Large position position: Nonlinear dynamics
         a    = - 2.0*lam*v - sqrt(8.0*acon*(+lam2*p-acon)) + acon;
         dadv = - 2.0*lam;
         dadp =             - lam2 * sqrt(2.0*acon/(+lam2*p-acon));
     }
     else if (lam2*p > -3*acon){
-        // Small position: Use linear dynamics
         a    = - 2.0*lam*v - lam2*p;
         dadv = - 2.0*lam;
         dadp =             - lam2;
     }
     else{
-        // Large negative position: Nonlinear dynamics
         a    = - 2.0*lam*v + sqrt(8.0*acon*(-lam2*p-acon)) - acon;
         dadv = - 2.0*lam;
         dadp =             - lam2 * sqrt(2.0*acon/(-lam2*p-acon));
     }
-
-    // Note we don't explicitly limit the acceleration to acon.  First
-    // such limits are more effectively imposed by force saturations.
-    // Second, if the proxy starts with very large velocities, higher
-    // accelerations may be helpful.  The dynamics are simply designed
-    // not to need more than acon to avoid overshoot.
     return;
 }
-
-
-
-// CONTINUOUS FIRST ORDER PROXY DYNAMICS
-//
-// Calculate the 1st order dynamics with which the proxy will
-// converge.  In particular, this calculates the acceleration a as a
-// function of velocity v (no position dependence).
-//
-//   a = a(v)
-//
-// It also calculates the partial dervative dq/dv.  The parameters are
-//
-//   lam    Bandwidth of convergence
-//   acon   Acceleration available for convergence
-//
-// This uses basic linear dynamics, ignoring acon, as no overshoot can
-// occur in a first order system.
 
 static void calcDynamics1storder(double &a, double &dadv, double v, double lam, double /*acon*/){
     a    = - lam*v;
@@ -59,7 +32,6 @@ static void calcDynamics1storder(double &a, double &dadv, double v, double lam, 
 
 class LimitedProxy{
 public:
-    // Controller parameter values
     double mass_;                 // Estimate of the joint mass
     double Kd_;                   // Damping gain
     double Kp_;                   // Position gain
@@ -79,9 +51,10 @@ public:
          pos_upper_limit_(0.0), pos_lower_limit_(0.0),
          lambda_proxy_(0.0), acc_converge_(0.0){
     }
+    
+    ~LimitedProxy(){}
 
     void reset(double pos_act, double vel_act){
-        // Place the proxy at the actual position, which sets the error to zero.
         last_proxy_pos_ = pos_act;
         last_proxy_vel_ = vel_act;
         last_proxy_acc_ = 0.0;
@@ -94,15 +67,15 @@ public:
     double update(double pos_des, double vel_des, double acc_des, double pos_act, double vel_act, double dt){
         // Get the parameters.  This ensures that they can not change during
         // the calculations and are non-negative!
-        double mass = abs(mass_);     // Estimate of the joint mass
-        double Kd   = abs(Kd_);       // Damping gain
-        double Kp   = abs(Kp_);       // Position gain
-        double Ki   = abs(Ki_);       // Integral gain
-        double Ficl = abs(Ficl_);     // Integral force clamp
-        double Flim = abs(effort_limit_); // Limit on output force
-        double vlim = abs(vel_limit_);    // Limit on velocity
-        double lam  = abs(lambda_proxy_); // Bandwidth of proxy reconvergence
-        double acon = abs(acc_converge_); // Acceleration of proxy reconvergence
+        double mass = fabs(mass_);     // Estimate of the joint mass
+        double Kd   = fabs(Kd_);       // Damping gain
+        double Kp   = fabs(Kp_);       // Position gain
+        double Ki   = fabs(Ki_);       // Integral gain
+        double Ficl = fabs(Ficl_);     // Integral force clamp
+        double Flim = fabs(effort_limit_); // Limit on output force
+        double vlim = fabs(vel_limit_);    // Limit on velocity
+        double lam  = fabs(lambda_proxy_); // Bandwidth of proxy reconvergence
+        double acon = fabs(acc_converge_); // Acceleration of proxy reconvergence
 
         if (lam * dt > 2.0)
             lam = 2.0/dt;
@@ -277,29 +250,17 @@ public:
                 // does not saturate.
                 dp = (force - Fpd - Fi) / (Kp + Ki*dt/2);
 
-                // Check for clamping/saturation on the adjusted integral
-                // force and re-compute the delta appropriately.  There is
-                // no need to re-check for clamping after recomputation, as
-                // the new delta will only increase and can not undo the
-                // saturation.
+
                 if      (Fi+dp*Ki*dt/2 >  Ficl)  dp=(force-Fpd-Ficl)/(Kp);
                 else if (Fi+dp*Ki*dt/2 < -Ficl)  dp=(force-Fpd+Ficl)/(Kp);
 
-                // Adjust the position and integral states.  Do not alter
-                // the acceleration or velocity.
                 pos_pxy += dp;
 
                 pos_err -= dp;
                 int_err -= dp * dt/2;
             }
-
-            // If the mass, damping, and position gain are all zero, there
-            // isn't much we can do...
         }
 
-          // Step 4: Clean up
-          // (a) Stop the position error integration (limit the integral error) if
-          //     the integrator clamp is in effect.  Note this is safe for Ki==0.
           if      (Ki * int_err >  Ficl)   int_err =  Ficl / Ki;
           else if (Ki * int_err < -Ficl)   int_err = -Ficl / Ki;
 
@@ -312,19 +273,20 @@ public:
           last_int_error_ = int_err;
 
           // (c) Return the controller force.
-          return force;
-      }
-}
-
+        return force;
+    }
+    
 private:
-// Controller state values
+    // Controller state values
     double last_proxy_pos_;       // Proxy position
     double last_proxy_vel_;       // Proxy velocity
     double last_proxy_acc_;       // Proxy acceleration
-
+    
     double last_vel_error_;       // Velocity error
     double last_pos_error_;       // Position error
     double last_int_error_;       // Integral error
 };
+
+
 
 #endif
