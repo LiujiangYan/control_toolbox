@@ -1,6 +1,18 @@
+#include <string>
+//#include <ros/ros.h>
+#include <control_msgs/PidState.h>
 
-class Pid
-{
+// Dynamic reconfigure
+#include <dynamic_reconfigure/server.h>
+#include <control_toolbox/ParametersConfig.h>
+#include <boost/thread/mutex.hpp>
+#include <boost/algorithm/clamp.hpp>
+
+// Realtime buffer
+#include <realtime_tools/realtime_buffer.h>
+#include <realtime_tools/realtime_publisher.h>
+
+class Pid{
 public:
 
     /*!
